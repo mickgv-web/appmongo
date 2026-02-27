@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "node-mongo-rastreador",
   "version": "1.0.0",
   "main": "src/index.js",
@@ -15,6 +15,7 @@
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.6.0",
-    "p-limit": "^5.0.0"
+    "p-limit": "^5.0.0",
+    "playwright": "^1.58.2"
   }
 }

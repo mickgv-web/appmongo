@@ -14,7 +14,7 @@ export async function handleSearch(query) {
 
   let search = await Search.findOne({ normalizedQuery });
 
-  // 🔵 CASO 1: No existe → crear y procesar
+  // CASO 1: No existe
   if (!search) {
     search = await Search.create({
       query,
@@ -29,10 +29,14 @@ export async function handleSearch(query) {
       refreshing: false,
       total: 0,
       data: [],
+      meta: {
+        strategies: {},
+        httpFailures: [],
+      },
     };
   }
 
-  // 🔵 CASO 2: Existe
+  // CASO 2: Existe
   const contacts = await Contact
     .find({ searchId: search._id })
     .sort({ createdAt: -1 });
@@ -43,7 +47,6 @@ export async function handleSearch(query) {
 
   let refreshing = false;
 
-  // 🔒 Evitar doble scraping
   if (isExpired && search.status !== "processing") {
     refreshing = true;
 
@@ -52,7 +55,6 @@ export async function handleSearch(query) {
       { status: "processing" }
     );
 
-    // 🔥 Muy importante: sincronizamos el objeto en memoria
     search.status = "processing";
 
     triggerScraping(search);
@@ -63,6 +65,10 @@ export async function handleSearch(query) {
     refreshing,
     total: contacts.length,
     data: contacts,
+    meta: {
+      strategies: search.lastStrategySummary || {},
+      httpFailures: search.lastHttpFailures || [],
+    },
   };
 }
 
@@ -71,19 +77,39 @@ function triggerScraping(search) {
     try {
       console.log("Starting scraping for:", search.normalizedQuery);
 
-      //const results = await runScraping(search.query);
-      const results = await runScraping();
+      const {
+        results = [],
+        blocked = [],
+        failed = [],
+        strategyUsed = [],
+        httpFailures = [],
+      } = await runScraping();
 
-      await Contact.deleteMany({ searchId: search._id });
+      // Resumen de estrategias
+      const strategySummary = strategyUsed.reduce((acc, item) => {
+        acc[item.strategy] = (acc[item.strategy] || 0) + 1;
+        return acc;
+      }, {});
 
-      const docs = results.map((r) => ({
-        ...r,
-        searchId: search._id,
-      }));
+      // Solo eliminamos e insertamos si hay resultados nuevos
+      if (results.length > 0) {
+        await Contact.deleteMany({ searchId: search._id });
 
-      if (docs.length) {
+        const docs = results.map((r) => ({
+          ...r,
+          searchId: search._id,
+        }));
+
         await Contact.insertMany(docs);
         console.log("Inserted contacts:", docs.length);
+      }
+
+      if (blocked.length) {
+        console.warn("Blocked URLs:", blocked);
+      }
+
+      if (failed.length) {
+        console.warn("Failed URLs:", failed);
       }
 
       await Search.updateOne(
@@ -91,6 +117,8 @@ function triggerScraping(search) {
         {
           status: "idle",
           lastUpdatedAt: new Date(),
+          lastStrategySummary: strategySummary,
+          lastHttpFailures: httpFailures,
         }
       );
 

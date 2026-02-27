@@ -1,62 +1,106 @@
-import axios from "axios";
-import * as cheerio from "cheerio";
 import pLimit from "p-limit";
+import { httpScrape } from "./httpScraper.service.js";
+import { browserScrape } from "./browserScraper.service.js";
+import DomainStrategy from "./domainStrategy.model.js";
 
-const limit = pLimit(2);
+const MAX_CONCURRENCY = parseInt(
+  process.env.SCRAPE_MAX_CONCURRENCY || 2
+);
+
+const limit = pLimit(MAX_CONCURRENCY);
 
 export async function runScraping() {
   const urls = [
-    "https://www.w3.org/Consortium/contact"
+    "https://www.w3.org/Consortium/contact",
+    "https://www.formacom.es/contacto",
   ];
 
-  const tasks = urls.map(url =>
-    limit(() => scrapeUrl(url))
-  ); 
+  const tasks = urls.map((url) =>
+    limit(() => scrapeWithStrategy(url))
+  );
 
-  const results = await Promise.all(tasks);
+  const responses = await Promise.all(tasks);
 
-  return results.flat();
+  return {
+    results: responses.flatMap((r) => r.results || []),
+    blocked: responses.flatMap((r) => r.blocked || []),
+    failed: responses.flatMap((r) => r.failed || []),
+
+    strategyUsed: responses.map((r) => ({
+      url: r.url,
+      strategy: r.strategy,
+    })),
+
+    httpFailures: responses
+      .filter((r) => r.httpFailed)
+      .map((r) => r.url),
+  };
 }
 
-async function scrapeUrl(url) {
-  try {
-    console.log("Scraping:", url);
+function extractDomain(url) {
+  return new URL(url).hostname;
+}
 
-    const { data } = await axios.get(url, {
-      timeout: 5000,
-      headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; AppMongoBot/1.0)"
-      }
-    });
+async function scrapeWithStrategy(url) {
+  const domain = extractDomain(url);
 
-    const $ = cheerio.load(data);
-    const text = $("body").text();
+  // Miramos si ya aprendimos estrategia
+  const strategyRecord = await DomainStrategy.findOne({ domain });
 
-    // Emails en texto
-    const textEmails = extractEmails(text);
+  // Si sabemos que necesita browser → vamos directo
+  if (strategyRecord?.preferredStrategy === "browser") {
+    console.log("Smart mode: using browser directly for:", domain);
 
-    // Emails en mailto
-    const mailtoEmails = $("a[href^='mailto:']")
-      .map((i, el) => $(el).attr("href").replace(/^mailto:/, "").trim())
-      .get();
+    const browserResult = await browserScrape(url);
 
-    const emails = [...new Set([...textEmails, ...mailtoEmails])];
-
-    console.log("Found emails:", emails);
-
-    return emails.map(email => ({
-      email,
-      phone: null,
-      sourceUrl: url
-    }));
-
-  } catch (error) {
-    console.error("Error scraping:", url, error.message);
-    return [];
+    return {
+      ...browserResult,
+      url,
+      strategy: "browser",
+      httpFailed: false,
+    };
   }
-}
 
-function extractEmails(text) {
-  const matches = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi);
-  return matches ? [...new Set(matches)] : [];
+  // Intentamos HTTP primero
+  const httpResult = await httpScrape(url);
+
+  // Si HTTP indica que necesita browser → aprendemos
+  if (httpResult.needsBrowser) {
+    console.log("Learning browser strategy for:", domain);
+
+    await DomainStrategy.findOneAndUpdate(
+      { domain },
+      {
+        preferredStrategy: "browser",
+        lastUpdatedAt: new Date(),
+      },
+      { upsert: true }
+    );
+
+    const browserResult = await browserScrape(url);
+
+    return {
+      ...browserResult,
+      url,
+      strategy: "browser",
+      httpFailed: true,
+    };
+  }
+
+  // HTTP funciona → persistimos preferencia HTTP
+  await DomainStrategy.findOneAndUpdate(
+    { domain },
+    {
+      preferredStrategy: "http",
+      lastUpdatedAt: new Date(),
+    },
+    { upsert: true }
+  );
+
+  return {
+    ...httpResult,
+    url,
+    strategy: "http",
+    httpFailed: false,
+  };
 }

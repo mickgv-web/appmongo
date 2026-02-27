@@ -1,4 +1,4 @@
-﻿FROM node:20-alpine
+﻿FROM mcr.microsoft.com/playwright:v1.43.0-jammy
 
 WORKDIR /usr/src/app
 

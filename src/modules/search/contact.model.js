@@ -17,7 +17,10 @@ const contactSchema = new mongoose.Schema(
 // Evitar duplicados por búsqueda
 contactSchema.index(
   { email: 1, searchId: 1 },
-  { unique: true }
+  {
+    unique: true,
+    partialFilterExpression: { email: { $type: "string" } }
+  }
 );
 
 export default mongoose.model("Contact", contactSchema);

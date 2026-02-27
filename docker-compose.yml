@@ -4,9 +4,6 @@
     container_name: node_app
     ports:
       - "3000:3000"
-    volumes:
-      - .:/usr/src/app
-      - /usr/src/app/node_modules
     env_file:
       - .env
     depends_on:
