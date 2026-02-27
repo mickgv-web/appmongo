@@ -6,13 +6,12 @@ const limit = pLimit(2);
 
 export async function runScraping() {
   const urls = [
-    "https://www.iana.org/domains/reserved",
-    "https://example.com"
+    "https://www.w3.org/Consortium/contact"
   ];
 
   const tasks = urls.map(url =>
     limit(() => scrapeUrl(url))
-  );
+  ); 
 
   const results = await Promise.all(tasks);
 
@@ -24,13 +23,24 @@ async function scrapeUrl(url) {
     console.log("Scraping:", url);
 
     const { data } = await axios.get(url, {
-      timeout: 5000
+      timeout: 5000,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; AppMongoBot/1.0)"
+      }
     });
 
     const $ = cheerio.load(data);
     const text = $("body").text();
 
-    const emails = extractEmails(text);
+    // Emails en texto
+    const textEmails = extractEmails(text);
+
+    // Emails en mailto
+    const mailtoEmails = $("a[href^='mailto:']")
+      .map((i, el) => $(el).attr("href").replace(/^mailto:/, "").trim())
+      .get();
+
+    const emails = [...new Set([...textEmails, ...mailtoEmails])];
 
     console.log("Found emails:", emails);
 
@@ -41,7 +51,7 @@ async function scrapeUrl(url) {
     }));
 
   } catch (error) {
-    console.error("Error scraping:", url);
+    console.error("Error scraping:", url, error.message);
     return [];
   }
 }

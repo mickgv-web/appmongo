@@ -14,4 +14,10 @@ const contactSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Evitar duplicados por búsqueda
+contactSchema.index(
+  { email: 1, searchId: 1 },
+  { unique: true }
+);
+
 export default mongoose.model("Contact", contactSchema);

@@ -19,64 +19,83 @@ export async function handleSearch(query) {
     search = await Search.create({
       query,
       normalizedQuery,
-      status: "processing"
+      status: "processing",
     });
 
     triggerScraping(search);
 
     return {
       status: "processing",
-      data: []
+      refreshing: false,
+      total: 0,
+      data: [],
     };
   }
 
   // 🔵 CASO 2: Existe
-  const contacts = await Contact.find({ searchId: search._id });
+  const contacts = await Contact
+    .find({ searchId: search._id })
+    .sort({ createdAt: -1 });
 
   const isExpired =
     !search.lastUpdatedAt ||
     Date.now() - search.lastUpdatedAt.getTime() > REFRESH_WINDOW;
 
+  let refreshing = false;
+
   // 🔒 Evitar doble scraping
   if (isExpired && search.status !== "processing") {
+    refreshing = true;
+
     await Search.updateOne(
       { _id: search._id },
       { status: "processing" }
     );
+
+    // 🔥 Muy importante: sincronizamos el objeto en memoria
+    search.status = "processing";
 
     triggerScraping(search);
   }
 
   return {
     status: search.status,
-    data: contacts
+    refreshing,
+    total: contacts.length,
+    data: contacts,
   };
 }
 
 function triggerScraping(search) {
   setImmediate(async () => {
     try {
+      console.log("Starting scraping for:", search.normalizedQuery);
+
       //const results = await runScraping(search.query);
       const results = await runScraping();
 
       await Contact.deleteMany({ searchId: search._id });
 
-      const docs = results.map(r => ({
+      const docs = results.map((r) => ({
         ...r,
-        searchId: search._id
+        searchId: search._id,
       }));
 
       if (docs.length) {
         await Contact.insertMany(docs);
+        console.log("Inserted contacts:", docs.length);
       }
 
       await Search.updateOne(
         { _id: search._id },
         {
           status: "idle",
-          lastUpdatedAt: new Date()
+          lastUpdatedAt: new Date(),
         }
       );
+
+      console.log("Finished scraping:", search.normalizedQuery);
+
     } catch (error) {
       console.error("Scraping error:", error);
 
