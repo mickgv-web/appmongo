@@ -8,12 +8,21 @@ const MAX_CONCURRENCY = parseInt(
 );
 
 const limit = pLimit(MAX_CONCURRENCY);
+const browserLimit = pLimit(1);
 
-export async function runScraping() {
-  const urls = [
-    "https://www.w3.org/Consortium/contact",
-    "https://www.formacom.es/contacto",
-  ];
+// 🔥 AHORA RECIBE URLS
+export async function runScraping(urls = []) {
+
+  if (!urls.length) {
+    console.warn("No URLs provided to scraper.");
+    return {
+      results: [],
+      blocked: [],
+      failed: [],
+      strategyUsed: [],
+      httpFailures: [],
+    };
+  }
 
   const tasks = urls.map((url) =>
     limit(() => scrapeWithStrategy(url))
@@ -44,14 +53,15 @@ function extractDomain(url) {
 async function scrapeWithStrategy(url) {
   const domain = extractDomain(url);
 
-  // Miramos si ya aprendimos estrategia
   const strategyRecord = await DomainStrategy.findOne({ domain });
 
-  // Si sabemos que necesita browser → vamos directo
+  // SMART MODE
   if (strategyRecord?.preferredStrategy === "browser") {
     console.log("Smart mode: using browser directly for:", domain);
 
-    const browserResult = await browserScrape(url);
+    const browserResult = await browserLimit(() =>
+      browserScrape(url)
+    );
 
     return {
       ...browserResult,
@@ -61,10 +71,9 @@ async function scrapeWithStrategy(url) {
     };
   }
 
-  // Intentamos HTTP primero
+  // HTTP FIRST
   const httpResult = await httpScrape(url);
 
-  // Si HTTP indica que necesita browser → aprendemos
   if (httpResult.needsBrowser) {
     console.log("Learning browser strategy for:", domain);
 
@@ -77,7 +86,9 @@ async function scrapeWithStrategy(url) {
       { upsert: true }
     );
 
-    const browserResult = await browserScrape(url);
+    const browserResult = await browserLimit(() =>
+      browserScrape(url)
+    );
 
     return {
       ...browserResult,
@@ -87,7 +98,7 @@ async function scrapeWithStrategy(url) {
     };
   }
 
-  // HTTP funciona → persistimos preferencia HTTP
+  // HTTP WORKED
   await DomainStrategy.findOneAndUpdate(
     { domain },
     {

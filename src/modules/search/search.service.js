@@ -1,6 +1,7 @@
 import Search from "./search.model.js";
 import Contact from "./contact.model.js";
 import { runScraping } from "../scraper/scraper.service.js";
+import { resolveUrlsForQuery } from "./searchResolver.service.js";
 
 const REFRESH_HOURS = parseInt(process.env.SCRAPE_REFRESH_HOURS || 6);
 const REFRESH_WINDOW = REFRESH_HOURS * 60 * 60 * 1000;
@@ -77,13 +78,18 @@ function triggerScraping(search) {
     try {
       console.log("Starting scraping for:", search.normalizedQuery);
 
+      // 🔥 NUEVO: resolvemos URLs dinámicas
+      const urls = await resolveUrlsForQuery(search.normalizedQuery);
+
+      console.log("Resolved URLs:", urls);
+
       const {
         results = [],
         blocked = [],
         failed = [],
         strategyUsed = [],
         httpFailures = [],
-      } = await runScraping();
+      } = await runScraping(urls);
 
       // Resumen de estrategias
       const strategySummary = strategyUsed.reduce((acc, item) => {
@@ -91,7 +97,6 @@ function triggerScraping(search) {
         return acc;
       }, {});
 
-      // Solo eliminamos e insertamos si hay resultados nuevos
       if (results.length > 0) {
         await Contact.deleteMany({ searchId: search._id });
 
