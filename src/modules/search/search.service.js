@@ -78,7 +78,7 @@ function triggerScraping(search) {
     try {
       console.log("Starting scraping for:", search.normalizedQuery);
 
-      // 🔥 NUEVO: resolvemos URLs dinámicas
+      // NUEVO: resolvemos URLs dinámicas
       const urls = await resolveUrlsForQuery(search.normalizedQuery);
 
       console.log("Resolved URLs:", urls);
@@ -127,7 +127,7 @@ function triggerScraping(search) {
         }
       );
 
-      console.log("Finished scraping:", search.normalizedQuery);
+      console.log("· Finished scraping:", search.normalizedQuery);
 
     } catch (error) {
       console.error("Scraping error:", error);
