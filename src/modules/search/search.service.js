@@ -10,7 +10,7 @@ function normalizeQuery(query) {
   return query.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-export async function handleSearch(query) {
+export async function handleSearch(query, { mode = "auto" } = {}) {
   const normalizedQuery = normalizeQuery(query);
 
   let search = await Search.findOne({ normalizedQuery });
@@ -23,7 +23,7 @@ export async function handleSearch(query) {
       status: "processing",
     });
 
-    triggerScraping(search);
+    triggerScraping(search, { mode });
 
     return {
       status: "processing",
@@ -58,7 +58,7 @@ export async function handleSearch(query) {
 
     search.status = "processing";
 
-    triggerScraping(search);
+    triggerScraping(search, { mode });
   }
 
   return {
@@ -73,13 +73,16 @@ export async function handleSearch(query) {
   };
 }
 
-function triggerScraping(search) {
+function triggerScraping(search, { mode }) {
   setImmediate(async () => {
     try {
       console.log("Starting scraping for:", search.normalizedQuery);
 
-      // NUEVO: resolvemos URLs dinámicas
-      const urls = await resolveUrlsForQuery(search.normalizedQuery);
+      // Resolver URLs usando mode
+      const urls = await resolveUrlsForQuery(
+        search.normalizedQuery,
+        { mode }
+      );
 
       console.log("Resolved URLs:", urls);
 
@@ -97,6 +100,7 @@ function triggerScraping(search) {
         return acc;
       }, {});
 
+      // Solo eliminamos e insertamos si hay resultados nuevos
       if (results.length > 0) {
         await Contact.deleteMany({ searchId: search._id });
 
@@ -127,7 +131,7 @@ function triggerScraping(search) {
         }
       );
 
-      console.log("· Finished scraping:", search.normalizedQuery);
+      console.log("Finished scraping:", search.normalizedQuery);
 
     } catch (error) {
       console.error("Scraping error:", error);

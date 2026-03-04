@@ -33,7 +33,7 @@ export async function searchDuckDuckGo(query, { limit = 5 } = {}) {
 
     const uniqueUrls = [...new Set(urls)];
 
-    console.log("Extracted URLs:", uniqueUrls);
+    console.log("DuckDuckGo Extracted URLs:", uniqueUrls);
 
     return uniqueUrls.slice(0, limit);
 
