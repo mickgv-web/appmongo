@@ -1,11 +1,14 @@
 import { chromium } from "playwright";
+import { runExtractors } from "./extractorEngine.js";
 
 export async function browserScrape(url) {
+
   console.log("Launching Playwright for:", url);
 
   let browser;
 
   try {
+
     browser = await chromium.launch({
       headless: true,
       args: ["--no-sandbox", "--disable-setuid-sandbox"],
@@ -20,37 +23,36 @@ export async function browserScrape(url) {
 
     const content = await page.content();
 
-    const emails = extractEmails(content);
+    const resources = runExtractors(content, url);
 
-    console.log("Browser found emails:", emails.length);
+    console.log("Browser extracted resources:", resources.length);
 
     return {
-      results: emails.map((email) => ({
-        email,
-        phone: null,
-        sourceUrl: url,
-      })),
+      results: resources,
       blocked: [],
       failed: [],
     };
+
   } catch (error) {
-    console.error("Browser scraping failed:", url, error.message);
+
+    console.error(
+      "Browser scraping failed:",
+      url,
+      error.message
+    );
 
     return {
       results: [],
       blocked: [],
       failed: [url],
     };
+
   } finally {
+
     if (browser) {
       await browser.close();
     }
-  }
-}
 
-function extractEmails(text) {
-  const matches = text.match(
-    /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi
-  );
-  return matches ? [...new Set(matches)] : [];
+  }
+
 }

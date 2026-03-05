@@ -2,13 +2,16 @@ import axios from "axios";
 import * as cheerio from "cheerio";
 import { waitForDomainSlot } from "./domain-rate-limiter.js";
 import { isUrlAllowed } from "./robots.service.js";
+import { runExtractors } from "./extractorEngine.js";
 
 const USER_AGENT =
   process.env.SCRAPE_USER_AGENT ||
   "Mozilla/5.0 (compatible; ExtractorBot/1.0)";
 
 export async function httpScrape(url) {
+
   try {
+
     console.log("Preparing HTTP scrape:", url);
 
     const allowed = await isUrlAllowed(url);
@@ -34,30 +37,20 @@ export async function httpScrape(url) {
     });
 
     const $ = cheerio.load(data);
+
     const text = $("body").text();
 
-    const textEmails = extractEmails(text);
-
-    const mailtoEmails = $("a[href^='mailto:']")
-      .map((i, el) =>
-        $(el).attr("href").replace(/^mailto:/, "").trim()
-      )
-      .get();
-
-    const emails = [...new Set([...textEmails, ...mailtoEmails])];
+    const resources = runExtractors(text, url);
 
     return {
-      results: emails.map((email) => ({
-        email,
-        phone: null,
-        sourceUrl: url,
-      })),
+      results: resources,
       blocked: [],
       failed: [],
       needsBrowser: false,
     };
 
   } catch (error) {
+
     const status = error.response?.status;
 
     const browserRequired =
@@ -71,13 +64,7 @@ export async function httpScrape(url) {
       failed: browserRequired ? [] : [url],
       needsBrowser: browserRequired,
     };
+
   }
-}
 
-function extractEmails(text) {
-  const matches = text.match(
-    /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi
-  );
-
-  return matches ? [...new Set(matches)] : [];
 }

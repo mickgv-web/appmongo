@@ -1,5 +1,6 @@
 import Search from "./search.model.js";
-import Contact from "./contact.model.js";
+import Resource from "./resource.model.js";
+
 import { runScraping } from "../scraper/scraper.service.js";
 import { resolveUrlsForQuery } from "./searchResolver.service.js";
 
@@ -38,7 +39,7 @@ export async function handleSearch(query, { mode = "auto" } = {}) {
   }
 
   // CASO 2: Existe
-  const contacts = await Contact
+  const resources = await Resource
     .find({ searchId: search._id })
     .sort({ createdAt: -1 });
 
@@ -64,8 +65,8 @@ export async function handleSearch(query, { mode = "auto" } = {}) {
   return {
     status: search.status,
     refreshing,
-    total: contacts.length,
-    data: contacts,
+    total: resources.length,
+    data: resources,
     meta: {
       strategies: search.lastStrategySummary || {},
       httpFailures: search.lastHttpFailures || [],
@@ -76,9 +77,10 @@ export async function handleSearch(query, { mode = "auto" } = {}) {
 function triggerScraping(search, { mode }) {
   setImmediate(async () => {
     try {
+
       console.log("Starting scraping for:", search.normalizedQuery);
 
-      // Resolver URLs usando mode
+      // Resolver URLs
       const urls = await resolveUrlsForQuery(
         search.normalizedQuery,
         { mode }
@@ -100,17 +102,45 @@ function triggerScraping(search, { mode }) {
         return acc;
       }, {});
 
-      // Solo eliminamos e insertamos si hay resultados nuevos
+      // Solo actualizamos si hay resultados
       if (results.length > 0) {
-        await Contact.deleteMany({ searchId: search._id });
 
-        const docs = results.map((r) => ({
+        // Snapshot strategy
+        await Resource.deleteMany({ searchId: search._id });
+
+        // Deduplicación en memoria
+        const uniqueMap = new Map();
+
+        for (const r of results) {
+
+          const key = `${r.type}:${r.value}`;
+
+          if (!uniqueMap.has(key)) {
+            uniqueMap.set(key, r);
+          }
+
+        }
+
+        const docs = [...uniqueMap.values()].map((r) => ({
           ...r,
           searchId: search._id,
         }));
 
-        await Contact.insertMany(docs);
-        console.log("Inserted contacts:", docs.length);
+        try {
+
+          await Resource.insertMany(docs, { ordered: false });
+
+          console.log("Inserted resources:", docs.length);
+
+        } catch (err) {
+
+          if (err.code === 11000) {
+            console.warn("Duplicate resources skipped");
+          } else {
+            throw err;
+          }
+
+        }
       }
 
       if (blocked.length) {
@@ -134,12 +164,14 @@ function triggerScraping(search, { mode }) {
       console.log("Finished scraping:", search.normalizedQuery);
 
     } catch (error) {
+
       console.error("Scraping error:", error);
 
       await Search.updateOne(
         { _id: search._id },
         { status: "idle" }
       );
+
     }
   });
 }
