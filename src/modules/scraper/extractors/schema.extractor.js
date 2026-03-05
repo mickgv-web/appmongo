@@ -7,78 +7,148 @@ export function extract(html, url) {
   const $ = cheerio.load(html);
 
   const resources = [];
+  const seen = new Set();
 
   $("script[type='application/ld+json']").each((_, el) => {
 
+    const raw = $(el).html();
+
+    if (!raw) return;
+
     try {
 
-      const json = JSON.parse($(el).html());
+      const json = JSON.parse(raw.trim());
 
       processSchema(json);
 
     } catch {
-      // ignorar JSON mal formado
+      // JSON-LD a veces viene parcialmente mal formado
+      // ignoramos para no romper el pipeline
     }
 
   });
 
   return resources;
 
+  function add(resource) {
+
+    const key = `${resource.type}:${resource.value}`;
+
+    if (seen.has(key)) return;
+
+    seen.add(key);
+
+    resources.push(resource);
+
+  }
+
   function processSchema(data) {
+
+    if (!data) return;
 
     if (Array.isArray(data)) {
       data.forEach(processSchema);
       return;
     }
 
-    if (!data || typeof data !== "object") return;
+    if (typeof data !== "object") return;
 
-    if (data.name) {
+    // soporte para @graph
+    if (Array.isArray(data["@graph"])) {
+      data["@graph"].forEach(processSchema);
+    }
 
-      resources.push({
+    const schemaType = data["@type"];
+
+    // company / organization name
+    if (data.name && typeof data.name === "string") {
+
+      const metadata = {
+        source: "schema.org"
+      };
+
+      if (schemaType) metadata.schemaType = schemaType;
+
+      if (typeof data.url === "string")
+        metadata.url = data.url.trim();
+
+      if (typeof data.logo === "string")
+        metadata.logo = data.logo.trim();
+
+      if (typeof data.legalName === "string")
+        metadata.legalName = data.legalName.trim();
+
+      if (typeof data.foundingDate === "string")
+        metadata.foundingDate = data.foundingDate.trim();
+
+      add({
         type: "company_name",
-        value: data.name,
-        sourceUrl: url
+        value: data.name.trim(),
+        sourceUrl: url,
+        metadata
       });
 
     }
 
-    if (data.telephone) {
+    // phone
+    if (typeof data.telephone === "string") {
 
-      resources.push({
+      add({
         type: "phone",
-        value: data.telephone,
+        value: data.telephone.trim(),
         sourceUrl: url,
-        metadata: { source: "schema.org" }
+        metadata: {
+          source: "schema.org",
+          schemaType
+        }
       });
 
     }
 
-    if (data.email) {
+    // email
+    if (typeof data.email === "string") {
 
-      resources.push({
+      add({
         type: "email",
-        value: data.email,
+        value: data.email.trim().toLowerCase(),
         sourceUrl: url,
-        metadata: { source: "schema.org" }
+        metadata: {
+          source: "schema.org",
+          schemaType
+        }
       });
 
     }
 
-    if (data.sameAs && Array.isArray(data.sameAs)) {
+    // social links
+    if (Array.isArray(data.sameAs)) {
 
       data.sameAs.forEach(link => {
 
-        resources.push({
+        if (typeof link !== "string") return;
+
+        add({
           type: "social",
-          value: link,
+          value: link.trim(),
           sourceUrl: url,
-          metadata: { source: "schema.org" }
+          metadata: {
+            source: "schema.org",
+            schemaType
+          }
         });
 
       });
 
     }
+
+    // recorrer propiedades internas
+    Object.values(data).forEach(value => {
+
+      if (typeof value === "object") {
+        processSchema(value);
+      }
+
+    });
 
   }
 

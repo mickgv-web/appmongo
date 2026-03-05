@@ -5,7 +5,7 @@ export function searchRateLimit(req, res, next) {
 
   const now = Date.now();
   const windowMs = 24 * 60 * 60 * 1000; // 24h
-  const maxRequests = 50; // configurable
+  const maxRequests = 300; // configurable
 
   if (!requests.has(userId)) {
     requests.set(userId, []);

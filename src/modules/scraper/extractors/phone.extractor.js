@@ -2,6 +2,17 @@ import * as cheerio from "cheerio";
 
 export const type = "phone";
 
+const blockedNumbers = [
+  "000000000",
+  "111111111",
+  "123456789",
+  "999999999"
+];
+
+// detecta varios formatos comunes en España
+const phoneRegex =
+/(?:\+34|0034)?\s*[6789]\d{2}[\s\-]?\d{3}[\s\-]?\d{3}|(?:\+34|0034)?[6789]\d{8}/g;
+
 export function extract(html, url) {
 
   const $ = cheerio.load(html);
@@ -21,7 +32,18 @@ export function extract(html, url) {
 
   });
 
-  // 2️⃣ elementos de contacto comunes
+  // 2️⃣ tel: encontrado en texto plano
+  const telMatches = html.match(/tel:\+?\d+/gi) || [];
+
+  telMatches.forEach(raw => {
+
+    const phone = normalize(raw.replace("tel:", ""));
+
+    if (phone) phones.add(phone);
+
+  });
+
+  // 3️⃣ zonas de contacto comunes
   const selectors = [
     "footer",
     "header",
@@ -36,8 +58,7 @@ export function extract(html, url) {
 
       const text = $(el).text();
 
-      const matches =
-        text.match(/(?:\+34|0034)?\s*[6789]\d{2}[\s\-]?\d{3}[\s\-]?\d{3}/g) || [];
+      const matches = text.match(phoneRegex) || [];
 
       matches.forEach(raw => {
 
@@ -66,6 +87,7 @@ function normalize(raw) {
     .replace(/[^\d+]/g, "")
     .replace(/^0034/, "+34");
 
+  // si no tiene prefijo
   if (!phone.startsWith("+34")) {
 
     if (phone.length === 9) phone = "+34" + phone;
@@ -75,7 +97,11 @@ function normalize(raw) {
 
   const digits = phone.replace("+34", "");
 
+  // validar formato español
   if (!/^[6789]\d{8}$/.test(digits)) return null;
+
+  // evitar placeholders
+  if (blockedNumbers.includes(digits)) return null;
 
   return "+34" + digits;
 

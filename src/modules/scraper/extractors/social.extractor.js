@@ -10,16 +10,44 @@ const patterns = {
 };
 
 const ignorePatterns = [
-  "facebook.com/sharer",
-  "facebook.com/share",
-  "twitter.com/intent",
-  "linkedin.com/share",
-  "linkedin.com/shareArticle"
+  "/share",
+  "/sharer",
+  "/intent",
+  "/admin",
+  "/posts",
+  "/status",
+  "/iframe",
+  "/embed",
+  "/hashtag",
 ];
 
-export function extract(text, url) {
+function normalizeUrl(url) {
+
+  let cleaned = url.trim();
+
+  // quitar trailing slash
+  cleaned = cleaned.replace(/\/+$/, "");
+
+  // normalizar http/https
+  cleaned = cleaned.replace(/^http:\/\//, "https://");
+
+  return cleaned;
+}
+
+function isIgnored(url) {
+
+  const lower = url.toLowerCase();
+
+  return ignorePatterns.some(pattern =>
+    lower.includes(pattern)
+  );
+
+}
+
+export function extract(text, sourceUrl) {
 
   const resources = [];
+  const seen = new Set();
 
   for (const [platform, regex] of Object.entries(patterns)) {
 
@@ -27,24 +55,24 @@ export function extract(text, url) {
 
     if (!matches) continue;
 
-    const unique = [...new Set(matches)];
+    for (const raw of matches) {
 
-    unique.forEach(link => {
+      const link = normalizeUrl(raw);
 
-      const lower = link.toLowerCase();
+      if (isIgnored(link)) continue;
 
-      const ignored = ignorePatterns.some(p => lower.includes(p));
+      if (seen.has(link)) continue;
 
-      if (ignored) return;
+      seen.add(link);
 
       resources.push({
         type,
         value: link,
-        sourceUrl: url,
+        sourceUrl,
         metadata: { platform }
       });
 
-    });
+    }
 
   }
 

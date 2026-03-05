@@ -1,7 +1,7 @@
 const domainState = new Map();
 
 const MIN_DELAY_MS = parseInt(
-  process.env.SCRAPE_DOMAIN_DELAY_MS || 1500
+  process.env.SCRAPE_DOMAIN_DELAY_MS || 1000
 );
 
 export async function waitForDomainSlot(url) {
