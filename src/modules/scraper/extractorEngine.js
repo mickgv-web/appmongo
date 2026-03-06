@@ -9,60 +9,44 @@ const extractorsDir = path.join(__dirname, "extractors");
 
 const extractors = [];
 
-loadExtractors();
+await loadExtractors();
 
-function loadExtractors() {
-
+async function loadExtractors() {
   const files = fs.readdirSync(extractorsDir);
 
-  for (const file of files) {
+  const extractorFiles = files.filter((file) => file.endsWith(".extractor.js"));
 
-    if (!file.endsWith(".extractor.js")) continue;
+  const modules = await Promise.all(
+    extractorFiles.map((file) => {
+      const modulePath = path.join(extractorsDir, file);
 
-    const modulePath = path.join(extractorsDir, file);
+      return import(modulePath);
+    }),
+  );
 
-    import(modulePath).then(mod => {
+  modules.forEach((mod, index) => {
+    if (typeof mod.extract === "function") {
+      console.log("Loaded extractor:", extractorFiles[index]);
 
-      if (typeof mod.extract === "function") {
-
-        console.log("Loaded extractor:", file);
-
-        extractors.push(mod);
-
-      }
-
-    });
-
-  }
-
+      extractors.push(mod);
+    }
+  });
 }
 
 export function runExtractors(html, url) {
-
   const resources = [];
 
   for (const extractor of extractors) {
-
     try {
-
       const result = extractor.extract(html, url);
 
       if (result?.length) {
         resources.push(...result);
       }
-
     } catch (err) {
-
-      console.warn(
-        "Extractor failed:",
-        extractor.type,
-        err.message
-      );
-
+      console.warn("Extractor failed:", extractor.type, err.message);
     }
-
   }
 
   return resources;
-
 }
