@@ -17,12 +17,7 @@ function App() {
   }
 
   if (!token) {
-    return (
-      <div style={{padding: "40px"}}>
-        <h1>Extractor Engine</h1>
-        <Login onLogin={handleLogin}/>
-      </div>
-    )
+    return <Login onLogin={setToken} />
   }
 
   return <Dashboard token={token} onLogout={handleLogout} />

@@ -1,64 +1,123 @@
 import { useState } from "react"
+import Sidebar from "../components/Sidebar"
 
-const API = "http://localhost:3000"
+const API = import.meta.env.VITE_API_URL || "http://localhost:3000"
 
 export default function Login({ onLogin }) {
 
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [message, setMessage] = useState("")
+  const [loading, setLoading] = useState(false)
 
   async function handleLogin(e) {
+
     e.preventDefault()
 
-    const res = await fetch(`${API}/auth/login`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ email, password })
-    })
+    setMessage("")
+    setLoading(true)
 
-    const data = await res.json()
+    try {
 
-    if (!res.ok) {
-      setMessage(data.message || "Login failed")
-      return
+      const res = await fetch(`${API}/auth/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ email, password })
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        setMessage(data.message || "Login failed")
+        return
+      }
+
+      onLogin(data.token)
+
+    } catch {
+
+      setMessage("Cannot reach API")
+
+    } finally {
+
+      setLoading(false)
+
     }
 
-    onLogin(data.token)
   }
 
   return (
-    <div style={{maxWidth: "400px"}}>
-      <h2>Login</h2>
 
-      <form onSubmit={handleLogin}>
+    <div className="app">
 
-        <input
-          placeholder="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
+      <Sidebar />
 
-        <br/><br/>
+      <div className="main">
 
-        <input
-          type="password"
-          placeholder="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
+        {/* TOPBAR */}
 
-        <br/><br/>
+        <div className="topbar">
 
-        <button type="submit">
-          Login
-        </button>
+          <div className="topbar-title">
+            Login
+          </div>
 
-      </form>
+        </div>
 
-      <p>{message}</p>
+        {/* LOGIN CARD */}
+
+        <div
+          className="card"
+          style={{ maxWidth: "420px" }}
+        >
+
+          <form
+            onSubmit={handleLogin}
+            className="search-bar"
+            style={{ flexDirection: "column" }}
+          >
+
+            <input
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+
+            <input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+
+            <button
+              type="submit"
+              disabled={loading}
+            >
+              {loading ? "Authenticating..." : "Login"}
+            </button>
+
+          </form>
+
+          {message && (
+            <div
+              className="meta"
+              style={{ marginTop: "12px", color: "#f87171" }}
+            >
+              {message}
+            </div>
+          )}
+
+        </div>
+
+      </div>
+
     </div>
+
   )
+
 }

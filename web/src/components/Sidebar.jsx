@@ -9,9 +9,6 @@ export default function Sidebar() {
       </div>
 
       <div className="nav-item">Dashboard</div>
-      <div className="nav-item">Search Jobs</div>
-      <div className="nav-item">Resources</div>
-      <div className="nav-item">Domains</div>
 
     </div>
 
